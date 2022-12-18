@@ -1,23 +1,26 @@
+import sys
 import torch
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
-from model import UNET
+from unet_model import UNET
+from doubleunet_model import DoubleUNET
 from utils import (
     load_checkpoint,
     save_checkpoint,
     get_loaders,
     check_accuracy,
     save_predictions_as_imgs,
+    parse_args,
 )
 
 # Hyperparameters etc.
 LEARNING_RATE = 1e-4
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 16
-NUM_EPOCHS = 1
+NUM_EPOCHS = 3
 NUM_WORKERS = 2
 IMAGE_HEIGHT = 160  # 1280 originally
 IMAGE_WIDTH = 240  # 1918 originally
@@ -52,6 +55,8 @@ def train_fn(loader, model, optimizer, loss_fn, scaler):
 
 
 def main():
+    selected_model, NUM_EPOCHS, LOAD_MODEL = parse_args(sys.argv)
+
     train_transform = A.Compose(
         [
             A.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
@@ -79,7 +84,11 @@ def main():
         ],
     )
 
-    model = UNET(in_channels=3, out_channels=1).to(DEVICE)
+    if selected_model == "UNET":
+        model = UNET(in_channels=3, out_channels=1).to(DEVICE)
+    elif selected_model == "DoubleUNET":
+        model = DoubleUNET().to(DEVICE)
+    
     loss_fn = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
@@ -96,7 +105,7 @@ def main():
     )
 
     if LOAD_MODEL:
-        load_checkpoint(torch.load("my_checkpoint.pth.tar"), model)
+        load_checkpoint(torch.load(selected_model + ".pth.tar"), model)
 
 
     check_accuracy(val_loader, model, device=DEVICE)
@@ -110,14 +119,14 @@ def main():
             "state_dict": model.state_dict(),
             "optimizer":optimizer.state_dict(),
         }
-        save_checkpoint(checkpoint)
+        save_checkpoint(checkpoint, selected_model + ".pth.tar")
 
         # check accuracy
         check_accuracy(val_loader, model, device=DEVICE)
 
         # print some examples to a folder
         save_predictions_as_imgs(
-            val_loader, model, folder="saved_images/", device=DEVICE
+            val_loader, model, folder="saved_images/" + selected_model + "/", device=DEVICE
         )
 
 

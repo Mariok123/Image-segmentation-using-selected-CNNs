@@ -6,8 +6,7 @@ import torchvision.transforms.functional as TF
 class DoubleConv(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(DoubleConv, self).__init__()
-        self.conv = nn.Sequential(
-            """
+        """
             in_channels - Number of channels in the input image
             out_channels - Number of channels produced by the convolution
             kernel_size = 3 - Size of the kernel mask (3x3) used for convolution
@@ -16,6 +15,7 @@ class DoubleConv(nn.Module):
             
             https://towardsdatascience.com/conv2d-to-finally-understand-what-happens-in-the-forward-pass-1bbaafb0b148
             """
+        self.conv = nn.Sequential( 
             # First blue arrow
             nn.Conv2d(in_channels, out_channels, 3, 1, 1, bias=False),
             nn.BatchNorm2d(out_channels),

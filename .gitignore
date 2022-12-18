@@ -1,5 +1,7 @@
 data
 saved_images
 my_checkpoint.pth.tar
+UNET.pth.tar
+DoubleUNET.pth.tar
 .project
 .pydevproject

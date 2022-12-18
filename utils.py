@@ -1,7 +1,13 @@
 import torch
 import torchvision
+import os
 from dataset import MyDataset
 from torch.utils.data import DataLoader
+
+VALID_MODELS = [
+    "UNET",
+    "DoubleUNET"
+]
 
 def save_checkpoint(state, filename="my_checkpoint.pth.tar"):
     print("=> Saving checkpoint")
@@ -77,8 +83,9 @@ def check_accuracy(loader, model, device="cuda"):
     model.train()
 
 def save_predictions_as_imgs(
-    loader, model, folder="saved_images/", device="cuda"
+    loader, model, folder="saved_images/default", device="cuda"
 ):
+    os.makedirs(folder, exist_ok = True)
     model.eval()
     for idx, (x, y) in enumerate(loader):
         x = x.to(device=device)
@@ -91,3 +98,22 @@ def save_predictions_as_imgs(
         torchvision.utils.save_image(y.unsqueeze(1), f"{folder}{idx}.png")
 
     model.train()
+
+def parse_args(args):
+    selected_model = "UNET"
+    load_model = False
+    num_epochs = 3
+
+    for i, arg in enumerate(args):
+        if "-m" == arg:
+            if args[i+1] in VALID_MODELS:
+                selected_model = args[i+1]
+            else:
+                print(f"{args[i+1]} is not a valid model, defaulted to UNET")
+        elif "-l" == arg:
+            load_model = True
+        elif "-e" == arg:
+            num_epochs = int(args[i+1])
+
+    print(f"Selected model: {selected_model}\nNumber of epochs: {num_epochs}\nLoad model: {load_model}")
+    return selected_model, num_epochs, load_model
