@@ -12,7 +12,7 @@ from utils import (
     save_checkpoint,
     get_loaders,
     check_accuracy,
-    save_predictions_as_imgs,
+    save_val_predictions_as_imgs,
     parse_args,
 )
 
@@ -121,7 +121,7 @@ def main():
         check_accuracy(val_loader, model, device=DEVICE)
 
         # print some examples to a folder
-        save_predictions_as_imgs(
+        save_val_predictions_as_imgs(
             val_loader, model, folder="saved_images/" + selected_model + "/", device=DEVICE
         )
 

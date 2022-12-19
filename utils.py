@@ -90,7 +90,7 @@ def check_accuracy(loader, model, device="cuda"):
     print(f"Dice score: {dice_score/len(loader)}")
     model.train()
 
-def save_predictions_as_imgs(
+def save_val_predictions_as_imgs(
     loader, model, folder="saved_images/default", device="cuda"
 ):
     os.makedirs(folder, exist_ok = True)
@@ -107,10 +107,25 @@ def save_predictions_as_imgs(
 
     model.train()
 
+def save_predictions_as_imgs(
+    loader, model, folder="saved_images/default", device="cuda"
+):
+    os.makedirs(folder, exist_ok = True)
+    model.eval()
+    for idx, x in enumerate(loader):
+        x = x.to(device=device)
+        with torch.no_grad():
+            preds = torch.sigmoid(model(x))
+            preds = (preds > 0.5).float()
+        torchvision.utils.save_image(
+            preds, f"{folder}/pred_{idx}.png"
+        )
+
 def parse_args(args):
     selected_model = "UNET"
     load_model = False
     num_epochs = 3
+    source_dir = ""
 
     for i, arg in enumerate(args):
         if "-m" == arg:
@@ -122,6 +137,8 @@ def parse_args(args):
             load_model = True
         elif "-e" == arg:
             num_epochs = int(args[i+1])
+        elif "-s" == arg:
+            source_dir = args[i+1]
 
     print(f"Selected model: {selected_model}\nNumber of epochs: {num_epochs}\nLoad model: {load_model}")
-    return selected_model, num_epochs, load_model
+    return selected_model, num_epochs, load_model, source_dir

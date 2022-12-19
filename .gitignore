@@ -1,5 +1,6 @@
 data
 saved_images
+predicted_images
 my_checkpoint.pth.tar
 UNET.pth.tar
 DoubleUNET.pth.tar
