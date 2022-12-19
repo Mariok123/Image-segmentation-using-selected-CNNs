@@ -1,8 +1,8 @@
 import torch
 import torchvision
 import os
-from dataset import MyDataset
-from torch.utils.data import DataLoader
+from dataset import InitDataset, SubDataset
+from torch.utils.data import DataLoader, random_split
 
 VALID_MODELS = [
     "UNET",
@@ -18,19 +18,26 @@ def load_checkpoint(checkpoint, model):
     model.load_state_dict(checkpoint["state_dict"])
 
 def get_loaders(
-    train_dir,
-    train_maskdir,
-    val_dir,
-    val_maskdir,
+    image_dir,
+    mask_dir,
     batch_size,
     train_transform,
     val_transform,
     num_workers=4,
     pin_memory=True,
 ):
-    train_ds = MyDataset(
-        image_dir=train_dir,
-        mask_dir=train_maskdir,
+
+    init_ds = InitDataset(
+        image_dir=image_dir
+    )
+
+    train_split = int(len(init_ds)*0.9)
+    train_subset, val_subset = random_split(init_ds, [train_split, len(init_ds) - train_split])
+
+    train_ds = SubDataset(
+        image_dir=image_dir,
+        mask_dir=mask_dir,
+        subset=train_subset,
         transform=train_transform,
     )
 
@@ -42,9 +49,10 @@ def get_loaders(
         shuffle=True,
     )
 
-    val_ds = MyDataset(
-        image_dir=val_dir,
-        mask_dir=val_maskdir,
+    val_ds = SubDataset(
+        image_dir=image_dir,
+        mask_dir=mask_dir,
+        subset=val_subset,
         transform=val_transform,
     )
 

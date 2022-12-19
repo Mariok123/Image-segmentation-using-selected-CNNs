@@ -6,7 +6,7 @@
         {
             "label": "Run Python with argument",
             "type": "shell",
-            "command": "python train.py -m DoubleUNET -e 2 -l",
+            "command": "python train.py -m UNET -e 3 -l",
             "group": {
                 "kind": "build",
                 "isDefault": true
