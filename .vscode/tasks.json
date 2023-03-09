@@ -7,7 +7,11 @@
             "label": "Run Python with argument",
             "type": "shell",
             //"command": "python train.py -m UNET -e 3 -l",
-            "command": "python predict.py -m DoubleUNET -s data/pred_images",
+            //"command": "python train.py -m DoubleUNET -e 3 -l",
+            "command": "python train.py -m ResUNETpp -e 3",
+            //"command": "python predict.py -m UNET -s data/pred_images",
+            //"command": "python predict.py -m DoubleUNET -s data/pred_images",
+            //"command": "python predict.py -m ResUNETpp -s data/pred_images",
             "group": {
                 "kind": "build",
                 "isDefault": true

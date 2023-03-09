@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 from unet_model import UNET
 from doubleunet_model import DoubleUNET
+from resunetpp_model import ResUNETpp
 from utils import (
     load_checkpoint,
     save_checkpoint,
@@ -53,7 +54,7 @@ def train_fn(loader, model, optimizer, loss_fn, scaler):
 
 
 def main():
-    selected_model, NUM_EPOCHS, LOAD_MODEL = parse_args(sys.argv)
+    selected_model, NUM_EPOCHS, LOAD_MODEL, _ = parse_args(sys.argv)
 
     train_transform = A.Compose(
         [
@@ -86,6 +87,8 @@ def main():
         model = UNET(in_channels=3, out_channels=1).to(DEVICE)
     elif selected_model == "DoubleUNET":
         model = DoubleUNET().to(DEVICE)
+    elif selected_model == "ResUNETpp":
+        model = ResUNETpp().to(DEVICE)
     
     loss_fn = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)

@@ -6,7 +6,8 @@ from torch.utils.data import DataLoader, random_split
 
 VALID_MODELS = [
     "UNET",
-    "DoubleUNET"
+    "DoubleUNET",
+    "ResUNETpp"
 ]
 
 def save_checkpoint(state, filename="my_checkpoint.pth.tar"):

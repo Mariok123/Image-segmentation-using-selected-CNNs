@@ -2,18 +2,13 @@ import sys
 import torch
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
-from tqdm import tqdm
-import torch.nn as nn
-import torch.optim as optim
 from dataset import PredictionDataset
 from unet_model import UNET
 from doubleunet_model import DoubleUNET
+from resunetpp_model import ResUNETpp
 from torch.utils.data import DataLoader
 from utils import (
     load_checkpoint,
-    save_checkpoint,
-    get_loaders,
-    check_accuracy,
     save_predictions_as_imgs,
     parse_args,
 )
@@ -33,6 +28,8 @@ def main():
         model = UNET(in_channels=3, out_channels=1).to(DEVICE)
     elif selected_model == "DoubleUNET":
         model = DoubleUNET().to(DEVICE)
+    elif selected_model == "ResUNETpp":
+        model = ResUNETpp().to(DEVICE)
 
     load_checkpoint(torch.load(selected_model + ".pth.tar"), model)
 

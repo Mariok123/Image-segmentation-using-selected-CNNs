@@ -4,5 +4,7 @@ predicted_images
 my_checkpoint.pth.tar
 UNET.pth.tar
 DoubleUNET.pth.tar
+ResUNETpp.pth.tar
 .project
 .pydevproject
+modules.py
