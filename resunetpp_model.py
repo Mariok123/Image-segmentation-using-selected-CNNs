@@ -1,24 +1,9 @@
 import torch
 import torch.nn as nn
-
-class Squeeze_Excitation(nn.Module):
-    def __init__(self, channel, r=8):
-        super().__init__()
-
-        self.pool = nn.AdaptiveAvgPool2d(1)
-        self.net = nn.Sequential(
-            nn.Linear(channel, channel // r, bias=False),
-            nn.ReLU(inplace=True),
-            nn.Linear(channel // r, channel, bias=False),
-            nn.Sigmoid(),
-        )
-
-    def forward(self, inputs):
-        b, c, _, _ = inputs.shape
-        x = self.pool(inputs).view(b, c)
-        x = self.net(x).view(b, c, 1, 1)
-        x = inputs * x
-        return x
+from modules import (
+    SqueezeAndExcite,
+    ASPP
+)
 
 class Stem_Block(nn.Module):
     def __init__(self, in_c, out_c, stride):
@@ -36,7 +21,7 @@ class Stem_Block(nn.Module):
             nn.BatchNorm2d(out_c),
         )
 
-        self.attn = Squeeze_Excitation(out_c)
+        self.attn = SqueezeAndExcite(out_c)
 
     def forward(self, inputs):
         x = self.c1(inputs)
@@ -62,48 +47,12 @@ class ResNet_Block(nn.Module):
             nn.BatchNorm2d(out_c),
         )
 
-        self.attn = Squeeze_Excitation(out_c)
+        self.attn = SqueezeAndExcite(out_c)
 
     def forward(self, inputs):
         x = self.c1(inputs)
         s = self.c2(inputs)
         y = self.attn(x + s)
-        return y
-
-class ASPP(nn.Module):
-    def __init__(self, in_c, out_c, rate=[1, 6, 12, 18]):
-        super().__init__()
-
-        self.c1 = nn.Sequential(
-            nn.Conv2d(in_c, out_c, kernel_size=3, dilation=rate[0], padding=rate[0]),
-            nn.BatchNorm2d(out_c)
-        )
-
-        self.c2 = nn.Sequential(
-            nn.Conv2d(in_c, out_c, kernel_size=3, dilation=rate[1], padding=rate[1]),
-            nn.BatchNorm2d(out_c)
-        )
-
-        self.c3 = nn.Sequential(
-            nn.Conv2d(in_c, out_c, kernel_size=3, dilation=rate[2], padding=rate[2]),
-            nn.BatchNorm2d(out_c)
-        )
-
-        self.c4 = nn.Sequential(
-            nn.Conv2d(in_c, out_c, kernel_size=3, dilation=rate[3], padding=rate[3]),
-            nn.BatchNorm2d(out_c)
-        )
-
-        self.c5 = nn.Conv2d(out_c, out_c, kernel_size=1, padding=0)
-
-
-    def forward(self, inputs):
-        x1 = self.c1(inputs)
-        x2 = self.c2(inputs)
-        x3 = self.c3(inputs)
-        x4 = self.c4(inputs)
-        x = x1 + x2 + x3 + x4
-        y = self.c5(x)
         return y
 
 class Attention_Block(nn.Module):

@@ -7,4 +7,5 @@ DoubleUNET.pth.tar
 ResUNETpp.pth.tar
 .project
 .pydevproject
-modules.py
+__pycache__/
+*.py[cod]
