@@ -153,6 +153,7 @@ class DoubleUNET(nn.Module):
         self.y2 = nn.Conv2d(32, 1, kernel_size=1, padding=0)
 
         self.sigmoid = nn.Sigmoid()
+        self.output = nn.Conv2d(2, 1, kernel_size=1, padding=0)
 
     def forward(self, x):
         x0 = x
@@ -167,8 +168,9 @@ class DoubleUNET(nn.Module):
         x = self.d2(x, skip1, skip2)
         y2 = self.y2(x)
 
-        #output = torch.cat([y1, y2], axis=1)
-        return y2
+        output = torch.cat([y1, y2], axis=1)
+        output = self.output(output)
+        return output
 
 if __name__ == "__main__":
     x = torch.randn((8, 3, 256, 256))

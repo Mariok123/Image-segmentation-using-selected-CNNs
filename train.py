@@ -84,7 +84,7 @@ def main():
     )
 
     if selected_model == "UNET":
-        model = UNET(in_channels=3, out_channels=1).to(DEVICE)
+        model = UNET().to(DEVICE)
     elif selected_model == "DoubleUNET":
         model = DoubleUNET().to(DEVICE)
     elif selected_model == "ResUNETpp":
