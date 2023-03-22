@@ -30,7 +30,8 @@ class ConvBlock(nn.Module):
         x = self.c1(x)
         x = self.c2(x)
         return x
-    
+
+# The encoder part (left part) of the UNET model
 class Encoder(nn.Module):
     def __init__(self):
         super().__init__()
@@ -59,7 +60,7 @@ class Encoder(nn.Module):
 
         return p4, [x4, x3, x2, x1]
 
-
+# The denoder part (right part) of the UNET model
 class Decoder(nn.Module):
     def __init__(self):
         super().__init__()
@@ -101,15 +102,15 @@ class UNET(nn.Module):
         super().__init__()
         
         self.e = Encoder()
-        self.bottom = ConvBlock(512, 1024)
+        self.bottom = ConvBlock(512, 1024) # Bottom layer of UNET
         self.d = Decoder()
-        self.y = nn.Conv2d(64, 1, kernel_size=1, padding=0)
+        self.output = nn.Conv2d(64, 1, 1)
 
     def forward(self, x):
         x, skip = self.e(x)
         x = self.bottom(x)
         x = self.d(x, skip)
-        y = self.y(x)
+        y = self.output(x)
 
         return y
 

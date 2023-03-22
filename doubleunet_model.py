@@ -145,15 +145,15 @@ class DoubleUNET(nn.Module):
         self.e1 = Encoder1()
         self.a1 = ASPP(512, 64)
         self.d1 = Decoder1()
-        self.y1 = nn.Conv2d(32, 1, kernel_size=1, padding=0)
+        self.y1 = nn.Conv2d(32, 1, 1)
 
         self.e2 = Encoder2()
         self.a2 = ASPP(256, 64)
         self.d2 = Decoder2()
-        self.y2 = nn.Conv2d(32, 1, kernel_size=1, padding=0)
+        self.y2 = nn.Conv2d(32, 1, 1)
 
         self.sigmoid = nn.Sigmoid()
-        self.output = nn.Conv2d(2, 1, kernel_size=1, padding=0)
+        self.output = nn.Conv2d(2, 1, 1)
 
     def forward(self, x):
         x0 = x
@@ -167,6 +167,7 @@ class DoubleUNET(nn.Module):
         x = self.a2(x)
         x = self.d2(x, skip1, skip2)
         y2 = self.y2(x)
+        y2 = self.sigmoid(y2) # Maybe?
 
         output = torch.cat([y1, y2], axis=1)
         output = self.output(output)

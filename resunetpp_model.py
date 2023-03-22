@@ -5,57 +5,61 @@ from modules import (
     ASPP
 )
 
-class Stem_Block(nn.Module):
+class StemBlock(nn.Module):
     def __init__(self, in_c, out_c, stride):
         super().__init__()
 
         self.c1 = nn.Sequential(
-            nn.Conv2d(in_c, out_c, kernel_size=3, stride=stride, padding=1),
+            nn.Conv2d(in_c, out_c, 3, stride, 1),
             nn.BatchNorm2d(out_c),
             nn.ReLU(),
-            nn.Conv2d(out_c, out_c, kernel_size=3, padding=1),
+            nn.Conv2d(out_c, out_c, 3, 1, 1)
         )
 
-        self.c2 = nn.Sequential(
-            nn.Conv2d(in_c, out_c, kernel_size=1, stride=stride, padding=0),
-            nn.BatchNorm2d(out_c),
+        self.shortcut = nn.Sequential(
+            nn.Conv2d(in_c, out_c, 1, stride, 0),
+            nn.BatchNorm2d(out_c)
         )
 
-        self.attn = SqueezeAndExcite(out_c)
+        self.sae = SqueezeAndExcite(out_c)
 
     def forward(self, inputs):
         x = self.c1(inputs)
-        s = self.c2(inputs)
-        y = self.attn(x + s)
+        s = self.shortcut(inputs)
+        y = self.sae(x + s)
         return y
 
-class ResNet_Block(nn.Module):
+class ResNetBlock(nn.Module):
     def __init__(self, in_c, out_c, stride):
         super().__init__()
 
         self.c1 = nn.Sequential(
             nn.BatchNorm2d(in_c),
             nn.ReLU(),
-            nn.Conv2d(in_c, out_c, kernel_size=3, padding=1, stride=stride),
-            nn.BatchNorm2d(out_c),
-            nn.ReLU(),
-            nn.Conv2d(out_c, out_c, kernel_size=3, padding=1)
+            nn.Conv2d(in_c, out_c, 3, stride, 1)
         )
 
         self.c2 = nn.Sequential(
-            nn.Conv2d(in_c, out_c, kernel_size=1, stride=stride, padding=0),
             nn.BatchNorm2d(out_c),
+            nn.ReLU(),
+            nn.Conv2d(out_c, out_c, 3, 1, 1)
         )
 
-        self.attn = SqueezeAndExcite(out_c)
+        self.shortcut = nn.Sequential(
+            nn.Conv2d(in_c, out_c, 1, stride, 0),
+            nn.BatchNorm2d(out_c)
+        )
+
+        self.sae = SqueezeAndExcite(out_c)
 
     def forward(self, inputs):
         x = self.c1(inputs)
-        s = self.c2(inputs)
-        y = self.attn(x + s)
+        x = self.c2(x)
+        s = self.shortcut(inputs)
+        y = self.sae(x + s)
         return y
 
-class Attention_Block(nn.Module):
+class AttentionBlock(nn.Module):
     def __init__(self, in_c):
         super().__init__()
         out_c = in_c[1]
@@ -63,20 +67,20 @@ class Attention_Block(nn.Module):
         self.g_conv = nn.Sequential(
             nn.BatchNorm2d(in_c[0]),
             nn.ReLU(),
-            nn.Conv2d(in_c[0], out_c, kernel_size=3, padding=1),
+            nn.Conv2d(in_c[0], out_c, 3, 1, 1),
             nn.MaxPool2d((2, 2))
         )
 
         self.x_conv = nn.Sequential(
             nn.BatchNorm2d(in_c[1]),
             nn.ReLU(),
-            nn.Conv2d(in_c[1], out_c, kernel_size=3, padding=1),
+            nn.Conv2d(in_c[1], out_c, 3, 1, 1)
         )
 
         self.gc_conv = nn.Sequential(
             nn.BatchNorm2d(in_c[1]),
             nn.ReLU(),
-            nn.Conv2d(out_c, out_c, kernel_size=3, padding=1),
+            nn.Conv2d(out_c, out_c, 3, 1, 1)
         )
 
     def forward(self, g, x):
@@ -87,13 +91,13 @@ class Attention_Block(nn.Module):
         y = gc_conv * x
         return y
 
-class Decoder_Block(nn.Module):
+class DecoderBlock(nn.Module):
     def __init__(self, in_c, out_c):
         super().__init__()
 
-        self.a1 = Attention_Block(in_c)
+        self.a1 = AttentionBlock(in_c)
         self.up = nn.Upsample(scale_factor=2, mode="nearest")
-        self.r1 = ResNet_Block(in_c[0]+in_c[1], out_c, stride=1)
+        self.r1 = ResNetBlock(in_c[0]+in_c[1], out_c, stride=1)
 
     def forward(self, g, x):
         d = self.a1(g, x)
@@ -106,19 +110,19 @@ class ResUNETpp(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.c1 = Stem_Block(3, 16, stride=1)
-        self.c2 = ResNet_Block(16, 32, stride=2)
-        self.c3 = ResNet_Block(32, 64, stride=2)
-        self.c4 = ResNet_Block(64, 128, stride=2)
+        self.c1 = StemBlock(3, 16, stride=1)
+        self.c2 = ResNetBlock(16, 32, stride=2)
+        self.c3 = ResNetBlock(32, 64, stride=2)
+        self.c4 = ResNetBlock(64, 128, stride=2)
 
         self.b1 = ASPP(128, 256)
 
-        self.d1 = Decoder_Block([64, 256], 128)
-        self.d2 = Decoder_Block([32, 128], 64)
-        self.d3 = Decoder_Block([16, 64], 32)
+        self.d1 = DecoderBlock([64, 256], 128)
+        self.d2 = DecoderBlock([32, 128], 64)
+        self.d3 = DecoderBlock([16, 64], 32)
 
         self.aspp = ASPP(32, 16)
-        self.output = nn.Conv2d(16, 1, kernel_size=1, padding=0)
+        self.output = nn.Conv2d(16, 1, 1)
 
     def forward(self, inputs):
         c1 = self.c1(inputs)

@@ -130,10 +130,18 @@ def parse_args(args):
 
     for i, arg in enumerate(args):
         if "-m" == arg:
-            if args[i+1] in VALID_MODELS:
-                selected_model = args[i+1]
+            model_choice = args[i+1]
+            if model_choice in VALID_MODELS:
+                selected_model = model_choice
             else:
-                print(f"{args[i+1]} is not a valid model, defaulted to UNET")
+                if model_choice == "1":
+                    selected_model = VALID_MODELS[0]
+                elif model_choice == "2":
+                    selected_model = VALID_MODELS[1]
+                elif model_choice == "3":
+                    selected_model = VALID_MODELS[2]
+                else:
+                    print(f"{model_choice} is not a valid model, defaulted to UNET")
         elif "-l" == arg:
             load_model = True
         elif "-e" == arg:
