@@ -1,11 +1,8 @@
 data
 saved_images
 predicted_images
-my_checkpoint.pth.tar
-UNET.pth.tar
-DoubleUNET.pth.tar
-ResUNETpp.pth.tar
 .project
 .pydevproject
 __pycache__/
 *.py[cod]
+*pth.tar

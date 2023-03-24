@@ -22,7 +22,7 @@ IMAGE_WIDTH = 240  # 1918 originally
 PIN_MEMORY = True
 
 def main():
-    selected_model, _, _, source_dir = parse_args(sys.argv)
+    selected_model, _, load_model_path, _, source_dir = parse_args(sys.argv)
 
     if selected_model == "UNET":
         model = UNET().to(DEVICE)
@@ -31,7 +31,7 @@ def main():
     elif selected_model == "ResUNETpp":
         model = ResUNETpp().to(DEVICE)
 
-    load_checkpoint(torch.load(selected_model + ".pth.tar"), model)
+    load_checkpoint(torch.load(load_model_path), model)
 
     pred_transforms = A.Compose(
         [

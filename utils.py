@@ -1,13 +1,18 @@
 import torch
 import torchvision
 import os
-from dataset import InitDataset, SubDataset
+from dataset import CarvanaDataset, SubDataset, IMCDBDataset
 from torch.utils.data import DataLoader, random_split
 
 VALID_MODELS = [
     "UNET",
     "DoubleUNET",
     "ResUNETpp"
+]
+
+VALID_DATASETS = [
+    "Carvana",
+    "IMCDB"
 ]
 
 def save_checkpoint(state, filename="my_checkpoint.pth.tar"):
@@ -18,51 +23,70 @@ def load_checkpoint(checkpoint, model):
     print("=> Loading checkpoint")
     model.load_state_dict(checkpoint["state_dict"])
 
-def get_loaders(
-    image_dir,
-    mask_dir,
-    batch_size,
-    train_transform,
-    val_transform,
-    num_workers=4,
-    pin_memory=True,
-):
-
-    init_ds = InitDataset(
-        image_dir=image_dir
-    )
+def get_carvana_loaders(image_dir, mask_dir, batch_size, train_transform, val_transform, num_workers=4, pin_memory=True):
+    init_ds = CarvanaDataset(image_dir, mask_dir)
 
     train_split = int(len(init_ds)*0.9)
     train_subset, val_subset = random_split(init_ds, [train_split, len(init_ds) - train_split])
 
     train_ds = SubDataset(
-        image_dir=image_dir,
-        mask_dir=mask_dir,
-        subset=train_subset,
-        transform=train_transform,
+        subset = train_subset,
+        transform = train_transform,
     )
 
     train_loader = DataLoader(
         train_ds,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
-        shuffle=True,
+        batch_size = batch_size,
+        num_workers = num_workers,
+        pin_memory = pin_memory,
+        shuffle = True,
     )
 
     val_ds = SubDataset(
-        image_dir=image_dir,
-        mask_dir=mask_dir,
-        subset=val_subset,
-        transform=val_transform,
+        subset = val_subset,
+        transform = val_transform,
     )
 
     val_loader = DataLoader(
         val_ds,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
-        shuffle=False,
+        batch_size = batch_size,
+        num_workers = num_workers,
+        pin_memory = pin_memory,
+        shuffle = False,
+    )
+
+    return train_loader, val_loader
+
+def get_imcdb_loaders(data_dir, batch_size, train_transform, val_transform, num_workers=4, pin_memory=True):
+    init_ds = IMCDBDataset(data_dir = data_dir)
+
+    train_split = int(len(init_ds)*0.9)
+    train_subset, val_subset = random_split(init_ds, [train_split, len(init_ds) - train_split])
+
+    train_ds = SubDataset(
+        subset = train_subset,
+        transform = train_transform,
+    )
+
+    train_loader = DataLoader(
+        train_ds,
+        batch_size = batch_size,
+        num_workers = num_workers,
+        pin_memory = pin_memory,
+        shuffle = True,
+    )
+
+    val_ds = SubDataset(
+        subset = val_subset,
+        transform = val_transform,
+    )
+
+    val_loader = DataLoader(
+        val_ds,
+        batch_size = batch_size,
+        num_workers = num_workers,
+        pin_memory = pin_memory,
+        shuffle = False,
     )
 
     return train_loader, val_loader
@@ -81,19 +105,13 @@ def check_accuracy(loader, model, device="cuda"):
             preds = (preds > 0.5).float()
             num_correct += (preds == y).sum()
             num_pixels += torch.numel(preds)
-            dice_score += (2 * (preds * y).sum()) / (
-                (preds + y).sum() + 1e-8
-            )
+            dice_score += (2 * (preds * y).sum()) / ((preds + y).sum() + 1e-8)
 
-    print(
-        f"Got {num_correct}/{num_pixels} with acc {num_correct/num_pixels*100:.2f}"
-    )
+    print(f"Got {num_correct}/{num_pixels} with acc {num_correct/num_pixels*100:.2f}")
     print(f"Dice score: {dice_score/len(loader)}")
     model.train()
 
-def save_val_predictions_as_imgs(
-    loader, model, folder="saved_images/default", device="cuda"
-):
+def save_val_predictions_as_imgs(loader, model, folder="saved_images/default", device="cuda"):
     os.makedirs(folder, exist_ok = True)
     model.eval()
     for idx, (x, y) in enumerate(loader):
@@ -108,9 +126,7 @@ def save_val_predictions_as_imgs(
 
     model.train()
 
-def save_predictions_as_imgs(
-    loader, model, folder="saved_images/default", device="cuda"
-):
+def save_predictions_as_imgs(loader, model, folder="saved_images/default", device="cuda"):
     os.makedirs(folder, exist_ok = True)
     model.eval()
     for idx, x in enumerate(loader):
@@ -124,7 +140,8 @@ def save_predictions_as_imgs(
 
 def parse_args(args):
     selected_model = "UNET"
-    load_model = False
+    selected_dataset = ""
+    load_model = ""
     num_epochs = 3
     source_dir = ""
 
@@ -142,12 +159,24 @@ def parse_args(args):
                     selected_model = VALID_MODELS[2]
                 else:
                     print(f"{model_choice} is not a valid model, defaulted to UNET")
+        elif "-d" == arg:
+            dataset_choice = args[i+1]
+            if dataset_choice in VALID_DATASETS:
+                selected_dataset = dataset_choice
+            else:
+                if dataset_choice == "1":
+                    selected_dataset = VALID_DATASETS[0]
+                elif dataset_choice == "2":
+                    selected_dataset = VALID_DATASETS[1]
+                else:
+                    print(f"{dataset_choice} is not a valid dataset")
+                    exit(1)
         elif "-l" == arg:
-            load_model = True
+            load_model = args[i+1]
         elif "-e" == arg:
             num_epochs = int(args[i+1])
         elif "-s" == arg:
             source_dir = args[i+1]
 
-    print(f"Selected model: {selected_model}\nNumber of epochs: {num_epochs}\nLoad model: {load_model}")
-    return selected_model, num_epochs, load_model, source_dir
+    print(f"Selected model: {selected_model}\nSelected dataset: {selected_dataset}\nNumber of epochs: {num_epochs}\nLoad model: {load_model}")
+    return selected_model, selected_dataset, load_model, num_epochs, source_dir

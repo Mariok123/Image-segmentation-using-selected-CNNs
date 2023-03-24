@@ -11,7 +11,8 @@ from resunetpp_model import ResUNETpp
 from utils import (
     load_checkpoint,
     save_checkpoint,
-    get_loaders,
+    get_carvana_loaders,
+    get_imcdb_loaders,
     check_accuracy,
     save_val_predictions_as_imgs,
     parse_args,
@@ -26,9 +27,13 @@ NUM_WORKERS = 2
 IMAGE_HEIGHT = 160  # 1280 originally
 IMAGE_WIDTH = 240  # 1918 originally
 PIN_MEMORY = True
-LOAD_MODEL = False
-IMG_DIR = "data/train_images/"
-MASK_DIR = "data/train_masks/"
+
+CARVANA_DIR = [
+    "data/Carvana/train_images/",
+    "data/Carvana/train_masks/"
+]
+
+IMCDB_DIR = "data/IMCDB-main"
 
 # Does one epoch of training
 def train_fn(loader, model, optimizer, loss_fn, scaler):
@@ -54,7 +59,7 @@ def train_fn(loader, model, optimizer, loss_fn, scaler):
 
 
 def main():
-    selected_model, NUM_EPOCHS, LOAD_MODEL, _ = parse_args(sys.argv)
+    selected_model, selected_dataset, load_model, NUM_EPOCHS, _ = parse_args(sys.argv)
 
     train_transform = A.Compose(
         [
@@ -89,22 +94,38 @@ def main():
         model = DoubleUNET().to(DEVICE)
     elif selected_model == "ResUNETpp":
         model = ResUNETpp().to(DEVICE)
+    else:
+        print("UNKNOWN MODEL")
+        exit(1)
     
     loss_fn = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
-    train_loader, val_loader = get_loaders(
-        IMG_DIR,
-        MASK_DIR,
-        BATCH_SIZE,
-        train_transform,
-        val_transforms,
-        NUM_WORKERS,
-        PIN_MEMORY,
-    )
+    if selected_dataset == "Carvana":
+        train_loader, val_loader = get_carvana_loaders(
+            CARVANA_DIR[0],
+            CARVANA_DIR[1],
+            BATCH_SIZE,
+            train_transform,
+            val_transforms,
+            NUM_WORKERS,
+            PIN_MEMORY
+        ) 
+    elif selected_dataset == "IMCDB":
+        train_loader, val_loader = get_imcdb_loaders(
+            IMCDB_DIR,
+            BATCH_SIZE,
+            train_transform,
+            val_transforms,
+            NUM_WORKERS,
+            PIN_MEMORY
+        )
+    else:
+        print("UNKNOWN DATASET")
+        exit(1)
 
-    if LOAD_MODEL:
-        load_checkpoint(torch.load(selected_model + ".pth.tar"), model)
+    if load_model:
+        load_checkpoint(torch.load(selected_model), model)
 
 
     check_accuracy(val_loader, model, device=DEVICE)
@@ -118,7 +139,7 @@ def main():
             "state_dict": model.state_dict(),
             "optimizer":optimizer.state_dict(),
         }
-        save_checkpoint(checkpoint, selected_model + ".pth.tar")
+        save_checkpoint(checkpoint, selected_model + "_"+ selected_dataset + ".pth.tar")
 
         # check accuracy
         check_accuracy(val_loader, model, device=DEVICE)
