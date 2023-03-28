@@ -3,7 +3,7 @@ import torchvision
 import os
 from dataset import CarvanaDataset, SubDataset, IMCDBDataset
 from torch.utils.data import DataLoader, random_split
-from torchmetrics import JaccardIndex, Dice
+from torchmetrics import Accuracy, JaccardIndex, F1Score
 
 VALID_MODELS = [
     "UNET",
@@ -93,33 +93,32 @@ def get_imcdb_loaders(data_dir, batch_size, train_transform, val_transform, num_
     return train_loader, val_loader
 
 def check_accuracy(loader, model, device="cuda"):
-    num_correct = 0
-    num_pixels = 0
+    accuracy = Accuracy(task="binary").to(device)
+    dice = F1Score(task="binary").to(device)
+    iou = JaccardIndex(task="binary").to(device)
+    accuracy_score = 0
     dice_score = 0
-    #dice_score2 = 0
-    #iou_score = 0
-    #iou = JaccardIndex(task="binary")
-    #dice = Dice()
+    iou_score = 0
+
     model.eval()
 
     with torch.no_grad():
         for x, y in loader:
             x = x.to(device)
             y = y.to(device).unsqueeze(1)
-            preds = torch.sigmoid(model(x))
-            preds = (preds > 0.5).float()
-            num_correct += (preds == y).sum()
-            num_pixels += torch.numel(preds)
-            dice_score += (2 * (preds * y).sum()) / (preds.sum() + y.sum() + 1e-8)
-            #iou(preds,y)
-            #dice_score2 += dice(preds,y)
 
-    acc = '{0:.2f}'.format(num_correct/num_pixels*100)
+            preds = model(x)
 
-    print(f"Got {num_correct}/{num_pixels} with acc {acc}")
+            accuracy_score += accuracy(preds, y)
+            dice_score += dice(preds, y)
+            iou_score += iou(preds, y)
+
+    acc = '{0:.2f}'.format(accuracy_score/len(loader)*100)
+
+    print(f"Accuracy reached: {acc}%")
     print(f"Dice score: {dice_score/len(loader)}")
-    #print(f"IoU score: {iou_score/len(loader)}")
-    #print(f"Dice score2: {dice_score2/len(loader)}")
+    print(f"IoU score: {iou_score/len(loader)}")
+
     model.train()
 
     return acc

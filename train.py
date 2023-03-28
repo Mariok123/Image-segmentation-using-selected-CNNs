@@ -1,4 +1,5 @@
 import sys
+import datetime 
 import torch
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
@@ -63,11 +64,13 @@ def train_fn(loader, model, optimizer, loss_fn, scaler):
 
 def main():
     selected_model, selected_dataset, load_model, NUM_EPOCHS, _ = parse_args(sys.argv)
+    currTime = datetime.datetime.now()
+    currTime = currTime.strftime('%Y%m%dT%H%M%S')
 
     train_transform = A.Compose(
         [
             A.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
-            A.Rotate(limit=35, p=1.0),
+            #A.Rotate(limit=35, p=1.0),
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.1),
             A.Normalize(
@@ -94,15 +97,18 @@ def main():
     if selected_model == "UNET":
         model = UNET().to(DEVICE)
         loss_fn = nn.BCEWithLogitsLoss()
-        optimizer = optim.Adam(model.parameters(), lr=1e-4)
+        optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     elif selected_model == "DoubleUNET":
         model = DoubleUNET().to(DEVICE)
-        loss_fn = DiceLoss()
-        optimizer = optim.Adam(model.parameters(), lr=1e-5)
+        #loss_fn = DiceLoss()
+        #optimizer = optim.Adam(model.parameters(), lr=1e-5)
+
+        loss_fn = nn.BCEWithLogitsLoss()
+        optimizer = optim.NAdam(model.parameters(), lr=LEARNING_RATE)
     elif selected_model == "ResUNETpp":
         model = ResUNETpp().to(DEVICE)
         loss_fn = DiceLoss()
-        optimizer = optim.Adam(model.parameters(), lr=1e-4)
+        optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     else:
         print("UNKNOWN MODEL")
         exit(1)
@@ -132,12 +138,13 @@ def main():
 
     if load_model:
         load_checkpoint(torch.load(selected_model), model)
-
-
-    check_accuracy(val_loader, model, device=DEVICE)
+        check_accuracy(val_loader, model, device=DEVICE)
+    
     scaler = torch.cuda.amp.GradScaler()
 
     for epoch in range(NUM_EPOCHS):
+        print("=======================")
+        print(f"Training epoch {epoch}.")
         train_fn(train_loader, model, optimizer, loss_fn, scaler)
 
         # save model
@@ -152,7 +159,7 @@ def main():
 
         # print some examples to a folder
         save_val_predictions_as_imgs(
-            val_loader, model, folder="saved_images/" + selected_model + "/" + selected_dataset + "/" + str(epoch) + " [" + str(acc) + "]/", device=DEVICE
+            val_loader, model, folder="saved_images/" + selected_model + "/" + selected_dataset + "/" + currTime + "/" + str(epoch) + " [" + str(acc) + "]/", device=DEVICE
         )
 
 
