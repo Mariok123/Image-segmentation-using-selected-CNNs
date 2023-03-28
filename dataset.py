@@ -71,7 +71,7 @@ class SubDataset(Dataset):
         
         # L - Greyscale
         mask = np.array(Image.open(self.subset[index][1]).convert("L"), dtype=np.float32)
-        mask[mask == 255.0] = 1.0
+        mask = np.where(mask == 255, 1.0, 0.0)
 
         if self.transform is not None:
             augmentations = self.transform(image=image, mask=mask)
