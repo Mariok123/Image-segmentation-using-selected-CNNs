@@ -17,6 +17,9 @@ from utils import (
     save_val_predictions_as_imgs,
     parse_args,
 )
+from modules import (
+    DiceLoss,
+)
 
 # Hyperparameters etc.
 LEARNING_RATE = 1e-4
@@ -90,16 +93,19 @@ def main():
 
     if selected_model == "UNET":
         model = UNET().to(DEVICE)
+        loss_fn = nn.BCEWithLogitsLoss()
+        optimizer = optim.Adam(model.parameters(), lr=1e-4)
     elif selected_model == "DoubleUNET":
         model = DoubleUNET().to(DEVICE)
+        loss_fn = DiceLoss()
+        optimizer = optim.Adam(model.parameters(), lr=1e-5)
     elif selected_model == "ResUNETpp":
         model = ResUNETpp().to(DEVICE)
+        loss_fn = DiceLoss()
+        optimizer = optim.Adam(model.parameters(), lr=1e-4)
     else:
         print("UNKNOWN MODEL")
         exit(1)
-    
-    loss_fn = nn.BCEWithLogitsLoss()
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     if selected_dataset == "Carvana":
         train_loader, val_loader = get_carvana_loaders(
@@ -142,11 +148,11 @@ def main():
         save_checkpoint(checkpoint, selected_model + "_"+ selected_dataset + ".pth.tar")
 
         # check accuracy
-        check_accuracy(val_loader, model, device=DEVICE)
+        acc = check_accuracy(val_loader, model, device=DEVICE)
 
         # print some examples to a folder
         save_val_predictions_as_imgs(
-            val_loader, model, folder="saved_images/" + selected_model + "/", device=DEVICE
+            val_loader, model, folder="saved_images/" + selected_model + "/" + selected_dataset + "/" + str(epoch) + " [" + str(acc) + "]/", device=DEVICE
         )
 
 

@@ -3,6 +3,7 @@ import torchvision
 import os
 from dataset import CarvanaDataset, SubDataset, IMCDBDataset
 from torch.utils.data import DataLoader, random_split
+from torchmetrics import JaccardIndex, Dice
 
 VALID_MODELS = [
     "UNET",
@@ -95,6 +96,10 @@ def check_accuracy(loader, model, device="cuda"):
     num_correct = 0
     num_pixels = 0
     dice_score = 0
+    #dice_score2 = 0
+    #iou_score = 0
+    #iou = JaccardIndex(task="binary")
+    #dice = Dice()
     model.eval()
 
     with torch.no_grad():
@@ -105,11 +110,19 @@ def check_accuracy(loader, model, device="cuda"):
             preds = (preds > 0.5).float()
             num_correct += (preds == y).sum()
             num_pixels += torch.numel(preds)
-            dice_score += (2 * (preds * y).sum()) / ((preds + y).sum() + 1e-8)
+            dice_score += (2 * (preds * y).sum()) / (preds.sum() + y.sum() + 1e-8)
+            #iou(preds,y)
+            #dice_score2 += dice(preds,y)
 
-    print(f"Got {num_correct}/{num_pixels} with acc {num_correct/num_pixels*100:.2f}")
+    acc = '{0:.2f}'.format(num_correct/num_pixels*100)
+
+    print(f"Got {num_correct}/{num_pixels} with acc {acc}")
     print(f"Dice score: {dice_score/len(loader)}")
+    #print(f"IoU score: {iou_score/len(loader)}")
+    #print(f"Dice score2: {dice_score2/len(loader)}")
     model.train()
+
+    return acc
 
 def save_val_predictions_as_imgs(loader, model, folder="saved_images/default", device="cuda"):
     os.makedirs(folder, exist_ok = True)
@@ -119,6 +132,7 @@ def save_val_predictions_as_imgs(loader, model, folder="saved_images/default", d
         with torch.no_grad():
             preds = torch.sigmoid(model(x))
             preds = (preds > 0.5).float()
+        torchvision.utils.save_image(x, f"{folder}/og_{idx}.png")
         torchvision.utils.save_image(
             preds, f"{folder}/pred_{idx}.png"
         )
@@ -158,7 +172,8 @@ def parse_args(args):
                 elif model_choice == "3":
                     selected_model = VALID_MODELS[2]
                 else:
-                    print(f"{model_choice} is not a valid model, defaulted to UNET")
+                    print(f"{model_choice} is not a valid model")
+                    exit(1)
         elif "-d" == arg:
             dataset_choice = args[i+1]
             if dataset_choice in VALID_DATASETS:
