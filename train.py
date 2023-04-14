@@ -18,7 +18,6 @@ from utils import (
     parse_args,
 )
 
-
 # Training hyperparameters
 LEARNING_RATE = 1e-4
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -55,8 +54,9 @@ def train_fn(loader, model, optimizer, loss_fn, scaler):
         # update tqdm loop
         loop.set_postfix(loss=loss.item())
 
+    epoch_time = float('{0:.2f}'.format(loop.format_dict['elapsed']))
     epoch_loss = float('{0:.4f}'.format(total_loss/len(loader)))
-    return loop.format_interval(loop.format_dict['elapsed']), epoch_loss
+    return epoch_time, epoch_loss
 
 # Entry point of program for training the neural networks
 def main():
