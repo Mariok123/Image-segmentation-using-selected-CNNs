@@ -2,71 +2,71 @@ import sys
 import datetime 
 import torch
 import albumentations as A
+import numpy as np
 from albumentations.pytorch import ToTensorV2
 from tqdm import tqdm
-import torch.nn as nn
-import torch.optim as optim
-from unet_model import UNET
-from doubleunet_model import DoubleUNET
-from resunetpp_model import ResUNETpp
+from early_stopping import EarlyStopping
 from utils import (
     load_checkpoint,
     save_checkpoint,
-    get_carvana_loaders,
-    get_imcdb_loaders,
-    check_accuracy,
+    get_model,
+    get_loaders,
+    check_training_metrics,
+    save_training_metrics,
+    save_val_ds_as_imgs,
     save_val_predictions_as_imgs,
     parse_args,
 )
-from modules import (
-    DiceLoss,
-)
 
-# Hyperparameters etc.
+
+# Training hyperparameters
 LEARNING_RATE = 1e-4
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 16
-NUM_EPOCHS = 3
 NUM_WORKERS = 2
-IMAGE_HEIGHT = 160  # 1280 originally
-IMAGE_WIDTH = 240  # 1918 originally
+IMAGE_HEIGHT = 160
+IMAGE_WIDTH = 240
 PIN_MEMORY = True
-
-CARVANA_DIR = [
-    "data/Carvana/train_images/",
-    "data/Carvana/train_masks/"
-]
-
-IMCDB_DIR = "data/IMCDB-main"
+EARLY_STOP_PATIENCE = 3
 
 # Does one epoch of training
+# returns how long training the epoch took and it's loss
 def train_fn(loader, model, optimizer, loss_fn, scaler):
     loop = tqdm(loader)
-
+    total_loss = 0
+    
     for batch_idx, (data, targets) in enumerate(loop):
         data = data.to(device=DEVICE)
         targets = targets.float().unsqueeze(1).to(device=DEVICE)
 
-        # forward
+        # forward pass
         with torch.cuda.amp.autocast():
             predictions = model(data)
             loss = loss_fn(predictions, targets)
 
-        # backward
+        # backward pass
         optimizer.zero_grad()
         scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
 
+        total_loss += loss.item()
+
         # update tqdm loop
         loop.set_postfix(loss=loss.item())
 
+    epoch_loss = float('{0:.4f}'.format(total_loss/len(loader)))
+    return loop.format_interval(loop.format_dict['elapsed']), epoch_loss
 
+# Entry point of program for training the neural networks
 def main():
-    selected_model, selected_dataset, load_model, NUM_EPOCHS, _ = parse_args(sys.argv)
+    selected_model, selected_dataset, load_model, num_epochs, early_stop, _  = parse_args(sys.argv)
+
     currTime = datetime.datetime.now()
     currTime = currTime.strftime('%Y%m%dT%H%M%S')
+    training_results_folder = "training_results/" + selected_model + "/" + selected_dataset + "/" + currTime + "/"
 
+    # image augmentations for the training dataset
     train_transform = A.Compose(
         [
             A.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
@@ -82,7 +82,8 @@ def main():
         ],
     )
 
-    val_transforms = A.Compose(
+    # image augmentations for the validation dataset
+    val_transform = A.Compose(
         [
             A.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
             A.Normalize(
@@ -94,74 +95,63 @@ def main():
         ],
     )
 
-    if selected_model == "UNET":
-        model = UNET().to(DEVICE)
-        loss_fn = nn.BCEWithLogitsLoss()
-        optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    elif selected_model == "DoubleUNET":
-        model = DoubleUNET().to(DEVICE)
-        #loss_fn = DiceLoss()
-        #optimizer = optim.Adam(model.parameters(), lr=1e-5)
+    model, loss_fn, optimizer = get_model(selected_model, DEVICE, LEARNING_RATE)
+    train_loader, val_loader = get_loaders(selected_dataset, BATCH_SIZE, train_transform, val_transform, NUM_WORKERS, PIN_MEMORY)
 
-        loss_fn = nn.BCEWithLogitsLoss()
-        optimizer = optim.NAdam(model.parameters(), lr=LEARNING_RATE)
-    elif selected_model == "ResUNETpp":
-        model = ResUNETpp().to(DEVICE)
-        loss_fn = DiceLoss()
-        optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    else:
-        print("UNKNOWN MODEL")
-        exit(1)
-
-    if selected_dataset == "Carvana":
-        train_loader, val_loader = get_carvana_loaders(
-            CARVANA_DIR[0],
-            CARVANA_DIR[1],
-            BATCH_SIZE,
-            train_transform,
-            val_transforms,
-            NUM_WORKERS,
-            PIN_MEMORY
-        ) 
-    elif selected_dataset == "IMCDB":
-        train_loader, val_loader = get_imcdb_loaders(
-            IMCDB_DIR,
-            BATCH_SIZE,
-            train_transform,
-            val_transforms,
-            NUM_WORKERS,
-            PIN_MEMORY
-        )
-    else:
-        print("UNKNOWN DATASET")
-        exit(1)
-
+    # load an already trained model for further training
     if load_model:
         load_checkpoint(torch.load(selected_model), model)
-        check_accuracy(val_loader, model, device=DEVICE)
+        check_training_metrics(val_loader, model, device=DEVICE)
     
     scaler = torch.cuda.amp.GradScaler()
 
-    for epoch in range(NUM_EPOCHS):
+    # save original images and masks from validation dataset for reference
+    save_val_ds_as_imgs(val_loader, folder=training_results_folder + "validation_set/", device=DEVICE)
+
+    if early_stop:
+        early_stopper = EarlyStopping(patience=EARLY_STOP_PATIENCE)
+
+    for epoch in range(num_epochs):
+        training_metrics = []
+
         print("=======================")
-        print(f"Training epoch {epoch}.")
-        train_fn(train_loader, model, optimizer, loss_fn, scaler)
+        print(f"Training epoch {epoch}/{num_epochs-1}")
+
+        # train an epoch
+        epoch_time, epoch_loss = train_fn(train_loader, model, optimizer, loss_fn, scaler)
+        training_metrics.extend((epoch_time, epoch_loss))
 
         # save model
         checkpoint = {
             "state_dict": model.state_dict(),
-            "optimizer":optimizer.state_dict(),
+            "optimizer": optimizer.state_dict(),
         }
         save_checkpoint(checkpoint, selected_model + "_"+ selected_dataset + ".pth.tar")
 
-        # check accuracy
-        acc = check_accuracy(val_loader, model, device=DEVICE)
+        # check training results
+        val_loss, accuracy, f1, iou = check_training_metrics(val_loader, model, loss_fn, device=DEVICE)
+        training_metrics.extend((val_loss, accuracy, f1, iou))
 
-        # print some examples to a folder
-        save_val_predictions_as_imgs(
-            val_loader, model, folder="saved_images/" + selected_model + "/" + selected_dataset + "/" + currTime + "/" + str(epoch) + " [" + str(acc) + "]/", device=DEVICE
-        )
+        # save predicted results of validation dataset to a folder
+        save_val_predictions_as_imgs(val_loader, model, folder=training_results_folder + str(epoch) + "/", device=DEVICE)
 
+        # save training metrics
+        save_training_metrics(training_results_folder + "training_metrics.csv", training_metrics)
+
+        if early_stop:
+            # test if validation loss got better
+            if early_stopper(model, val_loss):
+                print(f"Stopping early due to not improving for {early_stopper.counter} epochs")
+                print(f"Resaving previous best model")
+
+                # resave best model
+                checkpoint = {
+                    "state_dict": model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                }
+                save_checkpoint(checkpoint, selected_model + "_"+ selected_dataset + ".pth.tar")
+                
+                break
 
 if __name__ == "__main__":
     main()

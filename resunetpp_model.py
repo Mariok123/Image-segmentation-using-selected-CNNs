@@ -5,6 +5,7 @@ from modules import (
     ASPP
 )
 
+# The first block of the ResUNet++ model
 class StemBlock(nn.Module):
     def __init__(self, in_c, out_c, stride):
         super().__init__()
@@ -29,6 +30,7 @@ class StemBlock(nn.Module):
         y = self.sae(x + s)
         return y
 
+# A single residual convolution block used throughout the ResUNet++ model
 class ResNetBlock(nn.Module):
     def __init__(self, in_c, out_c, stride):
         super().__init__()
@@ -91,6 +93,7 @@ class AttentionBlock(nn.Module):
         y = gc_conv * x
         return y
 
+# A decoder block used in every decoding step of the model
 class DecoderBlock(nn.Module):
     def __init__(self, in_c, out_c):
         super().__init__()

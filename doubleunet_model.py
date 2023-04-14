@@ -6,6 +6,7 @@ from modules import (
     ASPP
 )
 
+# A single convolution block used throughout the whole DoubleUNet model
 class ConvBlock(nn.Module):
     def __init__(self, in_c, out_c):
         super().__init__()
@@ -30,6 +31,8 @@ class ConvBlock(nn.Module):
         x = self.sae(x)
         return x
 
+# Encoder of the first DoubleUNet network
+# uses the VGG19 pretrained network
 class Encoder1(nn.Module):
     def __init__(self):
         super().__init__()
@@ -52,6 +55,7 @@ class Encoder1(nn.Module):
         x5 = self.x5(x4)
         return x5, [x4, x3, x2, x1]
 
+# Encoder of the second DoubleUNet network
 class Encoder2(nn.Module):
     def __init__(self):
         super().__init__()
@@ -79,7 +83,8 @@ class Encoder2(nn.Module):
         p4 = self.pool(x4)
 
         return p4, [x4, x3, x2, x1]
-    
+
+# Decoder of the first DoubleUNet network
 class Decoder1(nn.Module):
     def __init__(self):
         super().__init__()
@@ -109,6 +114,7 @@ class Decoder1(nn.Module):
 
         return x
 
+# Decoder of the second DoubleUNet network
 class Decoder2(nn.Module):
     def __init__(self):
         super().__init__()

@@ -5,15 +5,7 @@ import torch.nn as nn
 class ConvBlock(nn.Module):
     def __init__(self, in_c, out_c):
         super().__init__()
-        """
-            in_c - Number of channels in the input image
-            out_c - Number of channels produced by the convolution
-            kernel_size = 3 - Size of the kernel mask (3x3) used for convolution
-            stride = 1 - How many pixels the kernel mask moves
-            padding = 1 - Add 1 pixel to all sides of image before convolution => Same convolution (output same size as input)
-            
-            https://towardsdatascience.com/conv2d-to-finally-understand-what-happens-in-the-forward-pass-1bbaafb0b148
-        """
+        
         self.c1 = nn.Sequential(
             nn.Conv2d(in_c, out_c, 3, 1, 1, bias=False),
             nn.BatchNorm2d(out_c),

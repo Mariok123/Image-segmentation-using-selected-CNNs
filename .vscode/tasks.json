@@ -6,8 +6,8 @@
         {
             "label": "Run Python with argument",
             "type": "shell",
-            "command": "python train.py -m 2 -d 1 -e 3",
-            //"command": "python predict.py -m 2 -l ./DoubleUNET_Carvana.pth.tar -s data/Carvana/pred_images",
+            "command": "python train.py -m 3 -d 2 -e 2 -es",
+            //"command": "python predict.py -m 3 -l ./ResUNETpp_IMCDB.pth.tar -s data/pred_images",
             "group": {
                 "kind": "build",
                 "isDefault": true

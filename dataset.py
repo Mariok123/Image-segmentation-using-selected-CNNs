@@ -3,6 +3,9 @@ from PIL import Image
 from torch.utils.data import Dataset
 import numpy as np
 
+# Dataset class for loading the Carvana dataset
+# can be used for any dataset that has the training images and masks in seperated folder with same ordered content
+# (ie. the first mask corresponds to the first image, second to second, etc.)
 class CarvanaDataset(Dataset):
     def __init__(self, image_dir, masks_dir):
         self.images = [os.path.join(image_dir, file) for file in os.listdir(image_dir)]
@@ -14,6 +17,8 @@ class CarvanaDataset(Dataset):
     def __getitem__(self, index):
         return self.images[index], self.masks[index]
     
+# Dataset class for loading the IMCDB dataset
+# the way the directories are ordered in the dataset is atrociously unique, thus it cannot really be reused
 class IMCDBDataset(Dataset):
     def __init__(self, data_dir):
         self.images = []
@@ -58,6 +63,9 @@ class IMCDBDataset(Dataset):
     def __getitem__(self, index):
         return self.images[index], self.masks[index]
 
+# Dataset class for seperated training or validation dataset
+# requires for the images and masks to be already loaded into a single 2d list
+# [i][0] corresponds to the image path and [i][0] corresponds to the mask path
 class SubDataset(Dataset):
     def __init__(self, subset, transform=None):
         self.subset = subset
@@ -71,6 +79,7 @@ class SubDataset(Dataset):
         
         # L - Greyscale
         mask = np.array(Image.open(self.subset[index][1]).convert("L"), dtype=np.float32)
+        # convert the mask to binary map
         mask = np.where(mask == 255, 1.0, 0.0)
 
         if self.transform is not None:
@@ -80,6 +89,8 @@ class SubDataset(Dataset):
 
         return image, mask
 
+# Dataset class for storing the images to be segmented
+# requires for the images to be in a single folder
 class PredictionDataset(Dataset):
     def __init__(self, image_dir, transform=None):
         self.image_dir = image_dir
@@ -97,61 +108,4 @@ class PredictionDataset(Dataset):
             augmentations = self.transform(image=image)
             image = augmentations["image"]
 
-        return image
-    
-def IMCDBDebug():
-    data_path = "data\IMCDB-main"
-    images = []
-    masks = []
-
-    dir_list = [os.path.join(data_path, directory) for directory in os.listdir(data_path) if os.path.isdir(os.path.join(data_path, directory))]
-    for directory_path in dir_list:
-        subdir_path_list = [os.path.join(directory_path, subdirectory) for subdirectory in os.listdir(directory_path) if os.path.isdir(os.path.join(directory_path, subdirectory))]
-        subdir_path_list.sort(key = str.lower)
-        
-        print("==============================")
-        print(directory_path)
-        for subdir in subdir_path_list:
-            subdir = subdir.split("\\")[-1]
-            print(f"--- {subdir}")
-        print("==============================")
-        for subdirectory in subdir_path_list:
-            mask_folder_found = ''
-            if "Page" in subdirectory:
-                for subdir in subdir_path_list:
-                    if "mask" in subdir:
-                        mask_folder_found = subdir
-                        break
-                    elif "MASK" in subdir:
-                        mask_folder_found = subdir
-
-            elif "PAGE" in subdirectory:
-                for subdir in subdir_path_list:
-                    if "MASK" in subdir:
-                        mask_folder_found = subdir
-                        break
-                    elif "mask" in subdir:
-                        mask_folder_found = subdir
-                        
-            if mask_folder_found:
-                subdir_path_list.remove(mask_folder_found)
-                temp_images = [os.path.join(subdirectory, file) for file in os.listdir(subdirectory) if os.path.isfile(os.path.join(subdirectory, file))]
-                temp_masks = [os.path.join(mask_folder_found, file) for file in os.listdir(mask_folder_found) if os.path.isfile(os.path.join(mask_folder_found, file))]
-
-                amount_to_use = len(temp_images) if len(temp_images) <= len(temp_masks) else len(temp_masks)
-
-                images.extend(temp_images[:amount_to_use])
-                masks.extend(temp_masks[:amount_to_use])
-
-                print(f"Added {amount_to_use} images from {subdirectory}")
-            
-
-    #print(images)
-    print(f"Total images loaded: {len(images)}")
-    print(f"Total masks loaded: {len(masks)}")
-
-def main():
-    IMCDBDebug()
-
-if __name__ == "__main__":
-    main()
+        return image, self.images[index]

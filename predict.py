@@ -9,28 +9,26 @@ from resunetpp_model import ResUNETpp
 from torch.utils.data import DataLoader
 from utils import (
     load_checkpoint,
+    get_model,
     save_predictions_as_imgs,
     parse_args,
 )
 
-# Hyperparameters etc.
+# Prediction hyperparameters
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 1
 NUM_WORKERS = 2
-IMAGE_HEIGHT = 160  # 1280 originally
-IMAGE_WIDTH = 240  # 1918 originally
+IMAGE_HEIGHT = 160
+IMAGE_WIDTH = 240
 PIN_MEMORY = True
 
+# Entry point of program for using an already trained model for prediction
 def main():
-    selected_model, _, load_model_path, _, source_dir = parse_args(sys.argv)
+    selected_model, _, load_model_path, _, _, source_dir = parse_args(sys.argv)
 
-    if selected_model == "UNET":
-        model = UNET().to(DEVICE)
-    elif selected_model == "DoubleUNET":
-        model = DoubleUNET().to(DEVICE)
-    elif selected_model == "ResUNETpp":
-        model = ResUNETpp().to(DEVICE)
+    model, *_ = get_model(selected_model)
 
+    # load pretrained model
     load_checkpoint(torch.load(load_model_path), model)
 
     pred_transforms = A.Compose(
@@ -54,10 +52,8 @@ def main():
         shuffle=False,
     )
 
-    # print predictions to folder as images
-    save_predictions_as_imgs(
-        pred_loader, model, folder="predicted_images/" + selected_model + "/", device=DEVICE
-    )
+    # save predictions to folder as images
+    save_predictions_as_imgs(pred_loader, model, folder="predicted_images/" + selected_model + "/", device=DEVICE)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 data
-saved_images
 predicted_images
+training_results
 .project
 .pydevproject
 __pycache__/
