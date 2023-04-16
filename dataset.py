@@ -3,13 +3,17 @@ from PIL import Image
 from torch.utils.data import Dataset
 import numpy as np
 
-# Dataset class for loading the Carvana dataset
+# Dataset class for loading generic dataset
 # can be used for any dataset that has the training images and masks in seperated folder with same ordered content
-# (ie. the first mask corresponds to the first image, second to second, etc.)
-class CarvanaDataset(Dataset):
+# (ie. the first mask corresponds to the first image, second to second, n-th to n-th, etc.)
+class GenericDataset(Dataset):
     def __init__(self, image_dir, masks_dir):
         self.images = [os.path.join(image_dir, file) for file in os.listdir(image_dir)]
         self.masks = [os.path.join(masks_dir, file) for file in os.listdir(masks_dir)]
+
+        if len(self.images) != len(self.masks):
+            print("Number of images in dataset does not match number of masks")
+            exit(1)
 
     def __len__(self):
         return len(self.images)
@@ -18,7 +22,7 @@ class CarvanaDataset(Dataset):
         return self.images[index], self.masks[index]
     
 # Dataset class for loading the IMCDB dataset
-# the way the directories are ordered in the dataset is atrociously unique, thus it cannot really be reused
+# the way the directories are structured in the dataset is atrociously unique, thus it cannot really be reused
 class IMCDBDataset(Dataset):
     def __init__(self, data_dir):
         self.images = []

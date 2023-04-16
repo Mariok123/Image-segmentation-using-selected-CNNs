@@ -6,8 +6,8 @@
         {
             "label": "Run Python with argument",
             "type": "shell",
-            //"command": "python train.py -m 3 -d 2 -e 10 -es",
-            "command": "python predict.py -m 3 -l ./ResUNETpp_IMCDB.pth.tar -s data/pred_images",
+            "command": "python train.py -m 3 -d 2 -e 30 -es -sv",
+            //"command": "python predict.py -m 3 -l ./ResUNETpp_20230416T031524.pth.tar -s data/pred_images",
             "group": {
                 "kind": "build",
                 "isDefault": true

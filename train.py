@@ -2,7 +2,6 @@ import sys
 import datetime 
 import torch
 import albumentations as A
-import numpy as np
 from albumentations.pytorch import ToTensorV2
 from tqdm import tqdm
 from early_stopping import EarlyStopping
@@ -11,11 +10,10 @@ from utils import (
     save_checkpoint,
     get_model,
     get_loaders,
-    check_training_metrics,
+    validate_model,
     save_training_metrics,
     save_val_ds_as_imgs,
-    save_val_predictions_as_imgs,
-    parse_args,
+    parse_training_args,
 )
 
 # Training hyperparameters
@@ -27,6 +25,7 @@ IMAGE_HEIGHT = 160
 IMAGE_WIDTH = 240
 PIN_MEMORY = True
 EARLY_STOP_PATIENCE = 3
+DATASET_SPLIT = 0.8
 
 # Does one epoch of training
 # returns how long training the epoch took and it's loss
@@ -39,9 +38,9 @@ def train_fn(loader, model, optimizer, loss_fn, scaler):
         targets = targets.float().unsqueeze(1).to(device=DEVICE)
 
         # forward pass
-        with torch.cuda.amp.autocast():
-            predictions = model(data)
-            loss = loss_fn(predictions, targets)
+        #with torch.cuda.amp.autocast(): # can cause NaN value in loss
+        predictions = model(data)
+        loss = loss_fn(predictions, targets)
 
         # backward pass
         optimizer.zero_grad()
@@ -60,11 +59,11 @@ def train_fn(loader, model, optimizer, loss_fn, scaler):
 
 # Entry point of program for training the neural networks
 def main():
-    selected_model, selected_dataset, load_model, num_epochs, early_stop, _  = parse_args(sys.argv)
+    selected_model, selected_dataset, dataset_source_dir, dataset_mask_dir, num_epochs, checkpoint_path, early_stop, save_validation_results = parse_training_args(sys.argv)
 
-    currTime = datetime.datetime.now()
-    currTime = currTime.strftime('%Y%m%dT%H%M%S')
-    training_results_folder = "training_results/" + selected_model + "/" + selected_dataset + "/" + currTime + "/"
+    startTimestamp = datetime.datetime.now()
+    startTimestamp = startTimestamp.strftime('%Y%m%dT%H%M%S')
+    training_results_folder = "training_results/" + selected_model + "/" + startTimestamp + "/"
 
     # image augmentations for the training dataset
     train_transform = A.Compose(
@@ -95,22 +94,27 @@ def main():
         ],
     )
 
-    model, loss_fn, optimizer = get_model(selected_model, DEVICE, LEARNING_RATE)
-    train_loader, val_loader = get_loaders(selected_dataset, BATCH_SIZE, train_transform, val_transform, NUM_WORKERS, PIN_MEMORY)
-
-    # load an already trained model for further training
-    if load_model:
-        load_checkpoint(torch.load(selected_model), model)
-        check_training_metrics(val_loader, model, device=DEVICE)
-    
     scaler = torch.cuda.amp.GradScaler()
 
+    model, loss_fn, optimizer = get_model(selected_model, DEVICE, LEARNING_RATE)
+    train_loader, val_loader = get_loaders(selected_dataset, BATCH_SIZE, train_transform, val_transform, NUM_WORKERS, PIN_MEMORY, dataset_split=DATASET_SPLIT, ds_source_dir=dataset_source_dir, ds_mask_dir=dataset_mask_dir)
+
+    # load an already trained model for further training
+    if checkpoint_path:
+        load_checkpoint(torch.load(checkpoint_path), model)
+        validate_model(val_loader, model, loss_fn, device=DEVICE)
+
     # save original images and masks from validation dataset for reference
-    save_val_ds_as_imgs(val_loader, folder=training_results_folder + "validation_set/", device=DEVICE)
+    if save_validation_results:
+        save_val_ds_as_imgs(val_loader, folder=training_results_folder + "validation_set/", device=DEVICE)
 
     if early_stop:
         early_stopper = EarlyStopping(patience=EARLY_STOP_PATIENCE)
 
+    # prepare .csv file for saving training metrics
+    save_training_metrics(training_results_folder, ["epoch_time", "epoch_loss", "val_loss", "accuracy", "f1_score", "iou_score"])
+
+    # start the training
     for epoch in range(num_epochs):
         training_metrics = []
 
@@ -126,22 +130,19 @@ def main():
             "state_dict": model.state_dict(),
             "optimizer": optimizer.state_dict(),
         }
-        save_checkpoint(checkpoint, selected_model + "_"+ selected_dataset + ".pth.tar")
+        save_checkpoint(checkpoint, selected_model + "_" + startTimestamp + ".pth.tar")
 
-        # check training results
-        val_loss, accuracy, f1, iou = check_training_metrics(val_loader, model, loss_fn, device=DEVICE)
+        # validate training results
+        val_loss, accuracy, f1, iou = validate_model(val_loader, model, loss_fn, save_validation_results, folder=training_results_folder + str(epoch) + "/", device=DEVICE)
         training_metrics.extend((val_loss, accuracy, f1, iou))
 
-        # save predicted results of validation dataset to a folder
-        save_val_predictions_as_imgs(val_loader, model, folder=training_results_folder + str(epoch) + "/", device=DEVICE)
-
         # save training metrics
-        save_training_metrics(training_results_folder + "training_metrics.csv", training_metrics)
+        save_training_metrics(training_results_folder, training_metrics)
 
         if early_stop:
-            # test if validation loss got better
+            # test for validation loss improvement
             if early_stopper(model, val_loss):
-                print(f"Stopping early due to not improving for {early_stopper.counter} epochs")
+                print(f"Stopping early due to not improving for {EARLY_STOP_PATIENCE} epochs")
                 print(f"Resaving previous best model")
 
                 # resave best model
@@ -149,8 +150,7 @@ def main():
                     "state_dict": model.state_dict(),
                     "optimizer": optimizer.state_dict(),
                 }
-                save_checkpoint(checkpoint, selected_model + "_"+ selected_dataset + ".pth.tar")
-                
+                save_checkpoint(checkpoint, selected_model + "_" + startTimestamp + ".pth.tar")
                 break
 
 if __name__ == "__main__":

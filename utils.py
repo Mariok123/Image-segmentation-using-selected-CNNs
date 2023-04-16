@@ -2,7 +2,7 @@ import torch
 import torchvision
 import os
 import csv
-from dataset import CarvanaDataset, SubDataset, IMCDBDataset
+from dataset import GenericDataset, SubDataset, IMCDBDataset
 from torch.utils.data import DataLoader, random_split
 from torchmetrics import Accuracy, JaccardIndex, F1Score
 import torch.nn as nn
@@ -43,8 +43,8 @@ def load_checkpoint(checkpoint, model):
     model.load_state_dict(checkpoint["state_dict"])
 
 
-# Returns necessary parameters that are unique between the different implemented models
-# if another model was to be implemented, it has to be also added here
+# Returns necessary items that are unique between the different implemented models
+# if another model was to be implemented, it also has to be added here
 def get_model(selected_model, device="cuda", learning_rate = 1e-4):
     if selected_model == "UNET":
         model = UNET().to(device)
@@ -62,16 +62,24 @@ def get_model(selected_model, device="cuda", learning_rate = 1e-4):
         model = ResUNETpp().to(device)
         loss_fn = DiceLoss()
         optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    else:
+        print("Unknown model")
+        exit(1)
 
     return model, loss_fn, optimizer
 
 # Returns the training and validation dataloader for one of the supported datasets
-# if another dataset was to be added, it has to be also added here
-def get_loaders(selected_dataset, batch_size, train_transform, val_transform, num_workers, pin_memory, dataset_split=0.8):
+# if another dataset was to be added, it also has to be added here
+def get_loaders(selected_dataset, batch_size, train_transform, val_transform, num_workers, pin_memory, dataset_split=0.8, ds_source_dir="", ds_mask_dir=""):
     if selected_dataset == "Carvana":
-        init_ds = CarvanaDataset(CARVANA_DIR[0], CARVANA_DIR[1])
+        init_ds = GenericDataset(CARVANA_DIR[0], CARVANA_DIR[1])
     elif selected_dataset == "IMCDB":
         init_ds = IMCDBDataset(IMCDB_DIR)
+    elif ds_source_dir and ds_mask_dir:
+        init_ds = GenericDataset(ds_source_dir, ds_mask_dir)
+    else:
+        print("Unknown dataset information")
+        exit(1)
     
     # split dataset into training and validation subsets
     train_split = int(len(init_ds)*dataset_split)
@@ -105,50 +113,58 @@ def get_loaders(selected_dataset, batch_size, train_transform, val_transform, nu
 
     return train_loader, val_loader
 
-# Calculates the training metrics for validation dataset, prints them out and returns them
-def check_training_metrics(loader, model, loss_fn, device="cuda"):
+# Validates model, calculates and prints training metrics and saves segmented masks if chosen to
+def validate_model(loader, model, loss_fn, save_validation_results=False, folder="saved_images/default", device="cuda"):
     accuracy = Accuracy(task="binary").to(device)
     f1 = F1Score(task="binary").to(device)
     iou = JaccardIndex(task="binary").to(device)
 
-    loss = 0
+    val_loss = 0
     accuracy_score = 0
     f1_score = 0
     iou_score = 0
 
     model.eval()
 
+    if save_validation_results:
+        os.makedirs(folder, exist_ok = True)
+
     with torch.no_grad():
-        for x, y in loader:
+        for idx, (x, y) in enumerate(loader):
             x = x.to(device)
             y = y.to(device).unsqueeze(1)
 
             preds = model(x)
 
-            loss += loss_fn(preds, y)
+            val_loss += loss_fn(preds, y)
             accuracy_score += accuracy(preds, y)
             f1_score += f1(preds, y)
             iou_score += iou(preds, y)
 
-    loss = float('{0:.4f}'.format(loss/len(loader)))
+            if save_validation_results:
+                preds = torch.sigmoid(preds)
+                preds = (preds > 0.5).float()
+                torchvision.utils.save_image(preds, f"{folder}/pred_{idx}.png")
+
+    val_loss = float('{0:.4f}'.format(val_loss/len(loader)))
     accuracy_score = float('{0:.4f}'.format(accuracy_score/len(loader)*100))
     f1_score = float('{0:.4f}'.format(f1_score/len(loader)))
     iou_score = float('{0:.4f}'.format(iou_score/len(loader)))
 
-    print(f"Validation loss: {loss}")
+    print(f"Validation loss: {val_loss}")
     print(f"Accuracy reached: {accuracy_score}%")
     print(f"F1 score: {f1_score}")
     print(f"IoU score: {iou_score}")
 
     model.train()
 
-    return loss, accuracy_score, f1_score, iou_score
-
+    return val_loss, accuracy_score, f1_score, iou_score
 
 # Writes training metrics to the end of a .csv file
-def save_training_metrics(file_path, training_metrics):
-    with open(file_path, 'a', newline='') as f:
-        writer = csv.writer(f)
+def save_training_metrics(folder, training_metrics):
+    os.makedirs(folder, exist_ok = True)
+    with open(folder + "training_metrics.csv", 'a', newline='') as f:
+        writer = csv.writer(f, delimiter=';')
         writer.writerow(training_metrics)
 
 # Saves the validation dataset images and masks to a folder, so they can be referenced while looking at training segmentation results
@@ -158,19 +174,6 @@ def save_val_ds_as_imgs(loader, folder="saved_images/default", device="cuda"):
         x = x.to(device=device)
         torchvision.utils.save_image(x, f"{folder}/orig_{idx}.png")
         torchvision.utils.save_image(y.unsqueeze(1), f"{folder}/mask_{idx}.png")
-
-# Saves the validation dataset images and masks to a folder, so they can be referenced while looking at training segmentation results
-def save_val_predictions_as_imgs(loader, model, folder="saved_images/default", device="cuda"):
-    os.makedirs(folder, exist_ok = True)
-    model.eval()
-    for idx, (x, y) in enumerate(loader):
-        x = x.to(device=device)
-        with torch.no_grad():
-            preds = torch.sigmoid(model(x))
-            preds = (preds > 0.5).float()
-        torchvision.utils.save_image(preds, f"{folder}/pred_{idx}.png")
-
-    model.train()
 
 # Saves the predicted masks of individual images
 def save_predictions_as_imgs(loader, model, folder="saved_images/default", device="cuda"):
@@ -183,63 +186,165 @@ def save_predictions_as_imgs(loader, model, folder="saved_images/default", devic
             preds = (preds > 0.5).float()
         torchvision.utils.save_image(preds, f"{folder}/pred_{y[0]}.png")
 
-# Parses commands line arguments and returns them
-# new models and datasets must be included in here
+# Parses commands line arguments used for training
+def parse_training_args(args):
+    selected_model = ""
+    selected_dataset = ""
+    dataset_source_dir = ""
+    dataset_mask_dir = ""
+    num_epochs = 5
+    checkpoint_path = ""
+
+    model_arg, dataset_arg, dataset_source_arg, dataset_mask_arg, epoch_arg, load_model_arg, _, early_stop, save_validation_results = parse_args(args)
+
+    if model_arg:
+        if model_arg in VALID_MODELS:
+            selected_model = model_arg
+        elif str.isdigit(model_arg):
+            if (model_arg := int(model_arg)) in range(1, len(VALID_MODELS)+1):
+                selected_model = VALID_MODELS[model_arg-1]
+
+    if dataset_arg:
+        if dataset_arg in VALID_DATASETS:
+            selected_dataset = dataset_arg
+        elif str.isdigit(dataset_arg):
+            if (dataset_arg := int(dataset_arg)) in range(1, len(VALID_DATASETS)+1):
+                selected_dataset = VALID_DATASETS[dataset_arg-1]
+    
+    if dataset_source_arg:
+        if os.path.isdir(dataset_source_arg):
+            dataset_source_dir = dataset_source_arg
+
+    if dataset_mask_arg:
+        if os.path.isdir(dataset_mask_arg):
+            dataset_mask_dir = dataset_mask_arg
+
+    if epoch_arg:
+        if str.isdigit(epoch_arg):
+            num_epochs = int(epoch_arg)
+        
+    if load_model_arg:
+        if os.path.isfile(load_model_arg):
+            checkpoint_path = load_model_arg
+        else:
+            print("Invalid -l argument")
+            exit(1)
+
+    if not selected_model:
+        print("Invalid or missing -m argument")
+        exit(1)
+    
+    if not selected_dataset:
+        if (dataset_source_dir and not dataset_mask_dir) or (not dataset_source_dir and dataset_mask_dir):
+            print("Invalid or missing -ds or -dm argument")
+            exit(1)
+        elif not dataset_source_dir and not dataset_mask_dir:
+            print("Invalid or missing -d argument")
+            exit(1)
+            
+    #print(f"Selected model: {selected_model}\nSelected dataset: {selected_dataset}\nNumber of epochs: {num_epochs}")
+    return selected_model, selected_dataset, dataset_source_dir, dataset_mask_dir, num_epochs, checkpoint_path, early_stop, save_validation_results
+
+# Parses commands line arguments used for prediction
+def parse_predict_args(args):
+    selected_model = ""
+    checkpoint_path = ""
+    source_dir_path = ""
+
+    model_arg, _, _, _, _, load_model_arg, source_dir_arg, _, _ = parse_args(args)
+
+    if model_arg:
+        if model_arg in VALID_MODELS:
+            selected_model = model_arg
+        elif str.isdigit(model_arg):
+            if (model_arg := int(model_arg)) in range(1, len(VALID_MODELS)+1):
+                selected_model = VALID_MODELS[model_arg-1]
+
+    if load_model_arg:
+        if os.path.isfile(load_model_arg):
+            checkpoint_path = load_model_arg
+
+    if source_dir_arg:
+        if os.path.isdir(source_dir_arg):
+            source_dir_path = source_dir_arg
+
+    if not selected_model:
+        print("Invalid or missing -m argument")
+        exit(1)
+
+    if not checkpoint_path:
+        print("Invalid or missing -l argument")
+        exit(1)
+
+    if not source_dir_path:
+        print("Invalid or missing -s argument")
+        exit(1)
+
+    return selected_model, checkpoint_path, source_dir_path
+
+# Parses commands line arguments, but does not check them
 def parse_args(args):
-    selected_model = "UNET"     # model that was selected, must be in VALID_MODELS list constant
-    selected_dataset = ""       # dataset that was selected, should be in VALID_DATASETS list constant
-    load_model = ""             # path to the checkpoint of the model to be loaded
-    num_epochs = 5              # number of epochs to train the network for
-    source_dir = ""             # path to the directory with images to be predicted
-    early_stop = False          # whether to use early stopping mechanism during training
+    model_arg = ""
+    dataset_arg = ""
+    dataset_source_arg = ""
+    dataset_mask_arg = ""
+    epoch_arg = ""
+    load_model_arg = ""
+    source_dir_arg = ""
+    early_stop = False
+    save_validation_results = False
+
+    if len(args) < 2:
+        printHelp()
+        exit(0)
 
     for i, arg in enumerate(args):
-        if "-m" == arg:
-            model_choice = args[i+1]
-            if model_choice in VALID_MODELS:
-                selected_model = model_choice
-            else:
-                if model_choice == "1":
-                    selected_model = VALID_MODELS[0]
-                elif model_choice == "2":
-                    selected_model = VALID_MODELS[1]
-                elif model_choice == "3":
-                    selected_model = VALID_MODELS[2]
-                else:
-                    print(f"{model_choice} is not a valid model")
-                    exit(1)
+        if "-h" == arg:
+            printHelp()
+            exit(0)
+        elif "-m" == arg:
+            model_arg = args[i+1]
         elif "-d" == arg:
-            dataset_choice = args[i+1]
-            if dataset_choice in VALID_DATASETS:
-                selected_dataset = dataset_choice
-            else:
-                if dataset_choice == "1":
-                    selected_dataset = VALID_DATASETS[0]
-                elif dataset_choice == "2":
-                    selected_dataset = VALID_DATASETS[1]
-                else:
-                    print(f"{dataset_choice} is not a valid dataset")
-                    exit(1)
-        elif "-l" == arg:
-            if os.path.isfile(args[i+1]):
-                load_model = args[i+1]
-            else:
-                print(f"File {args[i+1]} does not exist")
-                exit(1)
+            dataset_arg = args[i+1]
+        elif "-ds" == arg:
+            dataset_source_arg = args[i+1]
+        elif "-dm" == arg:
+            dataset_mask_arg = args[i+1]
         elif "-e" == arg:
-            if str.isdigit(args[i+1]):
-                num_epochs = int(args[i+1])
-            else:
-                print(f"Invalid value for epochs")
-                exit(1)
+            epoch_arg = args[i+1]
+        elif "-l" == arg:
+            load_model_arg = args[i+1]
         elif "-s" == arg:
-            if os.path.isdir(args[i+1]):
-                source_dir = args[i+1]
-            else:
-                print(f"Folder {args[i+1]} does not exist")
-                exit(1)
+            source_dir_arg = args[i+1]
         elif "-es" == arg:
             early_stop = True
+        elif "-sv" == arg:
+            save_validation_results = True
 
-    #print(f"Selected model: {selected_model}\nSelected dataset: {selected_dataset}\nNumber of epochs: {num_epochs}\nLoad model: {load_model}")
-    return selected_model, selected_dataset, load_model, num_epochs, early_stop, source_dir
+    return model_arg, dataset_arg, dataset_source_arg, dataset_mask_arg, epoch_arg, load_model_arg, source_dir_arg, early_stop, save_validation_results
+
+# Prints help info
+def printHelp():
+    print("Usage:")
+    print(" train.py -m MODEL -d DATASET [-l PATH] [-e INT] [-sv] [-st]")
+    print(" train.py -m MODEL -ds PATH -dm PATH [-l PATH] [-e INT] [-sv] [-st]")
+    print(" predict.py -m MODEL -l PATH -s PATH")
+    print("")
+
+    print("Model arguments:")
+    print(f"{' -m MODEL':10s}\tmodel to use for training/prediction, accepts name or numbers (1-{len(VALID_MODELS)}), {VALID_MODELS}")
+    print(f"{' -l PATH':10s}\tload model checkpoint from path")
+    print("")
+
+    print("Data arguments")
+    print(f"{' -d DATASET':10s}\tdataset to use for training, accepts name or numbers (1-{len(VALID_DATASETS)}), can be substituted with -ds and -dm (if both used, -d takes priority), {VALID_DATASETS}")
+    print(f"{' -ds PATH':10s}\tpath to dataset image directory")
+    print(f"{' -dm PATH':10s}\tpath to dataset mask directory")
+    print(f"{' -s PATH':10s}\tpath to directory of images to predict")
+    print("")
+
+    print("Optional arguments:")
+    print(f"{' -h ':10s}\tprint out help and exit")
+    print(f"{' -es ':10s}\tenable early stopping for training (default False)")
+    print(f"{' -sv ':10s}\tsave segmentation masks produced during validation (default False)")
+    print(f"{' -e INT':10s}\thow many epochs to train model for (default 5)")

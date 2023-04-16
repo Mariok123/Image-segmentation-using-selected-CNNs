@@ -52,7 +52,7 @@ class Encoder(nn.Module):
 
         return p4, [x4, x3, x2, x1]
 
-# The denoder part (right part) of the UNET model
+# The decoder part (right part) of the UNET model
 class Decoder(nn.Module):
     def __init__(self):
         super().__init__()
@@ -105,12 +105,3 @@ class UNET(nn.Module):
         y = self.output(x)
 
         return y
-
-def test():
-    x = torch.randn((3, 1, 161, 161))
-    model = UNET()
-    preds = model(x)
-    assert preds.shape == x.shape
-
-if __name__ == "__main__":
-    test()

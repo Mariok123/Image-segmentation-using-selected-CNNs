@@ -6,3 +6,4 @@ training_results
 __pycache__/
 *.py[cod]
 *pth.tar
+*.bat

@@ -178,9 +178,3 @@ class DoubleUNET(nn.Module):
         output = torch.cat([y1, y2], axis=1)
         output = self.output(output)
         return output
-
-if __name__ == "__main__":
-    x = torch.randn((8, 3, 256, 256))
-    model = DoubleUNET()
-    y1, y2, output = model(x)
-    print(y1.shape, y2.shape, output.shape)

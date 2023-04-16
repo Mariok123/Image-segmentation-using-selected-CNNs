@@ -3,15 +3,12 @@ import torch
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 from dataset import PredictionDataset
-from unet_model import UNET
-from doubleunet_model import DoubleUNET
-from resunetpp_model import ResUNETpp
 from torch.utils.data import DataLoader
 from utils import (
     load_checkpoint,
     get_model,
     save_predictions_as_imgs,
-    parse_args,
+    parse_predict_args,
 )
 
 # Prediction hyperparameters
@@ -24,12 +21,12 @@ PIN_MEMORY = True
 
 # Entry point of program for using an already trained model for prediction
 def main():
-    selected_model, _, load_model_path, _, _, source_dir = parse_args(sys.argv)
+    selected_model, checkpoint_path, source_dir_path = parse_predict_args(sys.argv)
 
     model, *_ = get_model(selected_model)
 
     # load pretrained model
-    load_checkpoint(torch.load(load_model_path), model)
+    load_checkpoint(torch.load(checkpoint_path), model)
 
     pred_transforms = A.Compose(
         [
@@ -43,7 +40,7 @@ def main():
         ],
     )
 
-    pred_dataset = PredictionDataset(source_dir, pred_transforms)
+    pred_dataset = PredictionDataset(source_dir_path, pred_transforms)
     pred_loader = DataLoader(
         pred_dataset,
         batch_size=BATCH_SIZE,
