@@ -26,11 +26,11 @@ VALID_DATASETS = [
 ]
 
 CARVANA_DIR = [
-    "data/Carvana/train_images/",
+    "data/Carvana/train/",
     "data/Carvana/train_masks/"
 ]
 
-IMCDB_DIR = "data/IMCDB-main"
+IMCDB_DIR = "data/IMCDB/"
 
 # Saves the checkpoint of the currently training model
 def save_checkpoint(state, filename="checkpoint.pth.tar"):
@@ -49,15 +49,15 @@ def get_model(selected_model, device="cuda", learning_rate = 1e-4):
     if selected_model == "UNET":
         model = UNET().to(device)
         loss_fn = nn.BCEWithLogitsLoss()
-        optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+        optimizer = optim.SGD(model.parameters(), lr=learning_rate, nesterov=True, momentum=0.99)
     elif selected_model == "DoubleUNET":
         model = DoubleUNET().to(device)
 
-        #loss_fn = DiceLoss()
-        #optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+        loss_fn = DiceLoss()                                          # one of the two combinations may perform slightly better on certain datasets
+        optimizer = optim.Adam(model.parameters(), lr=learning_rate)  #
 
-        loss_fn = nn.BCEWithLogitsLoss()
-        optimizer = optim.NAdam(model.parameters(), lr=learning_rate)
+        #loss_fn = nn.BCEWithLogitsLoss()
+        #optimizer = optim.NAdam(model.parameters(), lr=learning_rate)
     elif selected_model == "ResUNETpp":
         model = ResUNETpp().to(device)
         loss_fn = DiceLoss()
@@ -114,7 +114,7 @@ def get_loaders(selected_dataset, batch_size, train_transform, val_transform, nu
     return train_loader, val_loader
 
 # Validates model, calculates and prints training metrics and saves segmented masks if chosen to
-def validate_model(loader, model, loss_fn, save_validation_results=False, folder="saved_images/default", device="cuda"):
+def validate_model(loader, model, loss_fn, save_validation_results=False, folder="training_results/default", device="cuda"):
     accuracy = Accuracy(task="binary").to(device)
     f1 = F1Score(task="binary").to(device)
     iou = JaccardIndex(task="binary").to(device)
@@ -241,7 +241,17 @@ def parse_training_args(args):
         elif not dataset_source_dir and not dataset_mask_dir:
             print("Invalid or missing -d argument")
             exit(1)
-            
+    else:
+        if selected_dataset == "Carvana":
+            for dir in CARVANA_DIR:
+                if not os.path.isdir(dir):
+                    print(f"Missing source folder {dir} for Carvana dataset")
+                    exit(1)
+        elif selected_dataset == "IMCDB":
+            if not os.path.isdir(IMCDB_DIR):
+                print(f"Missing source folder {IMCDB_DIR} for IMCDB dataset")
+                exit(1)
+    
     #print(f"Selected model: {selected_model}\nSelected dataset: {selected_dataset}\nNumber of epochs: {num_epochs}")
     return selected_model, selected_dataset, dataset_source_dir, dataset_mask_dir, num_epochs, checkpoint_path, early_stop, save_validation_results
 
@@ -344,7 +354,7 @@ def printHelp():
     print("")
 
     print("Optional arguments:")
-    print(f"{' -h ':10s}\tprint out help and exit")
+    print(f"{' -h ':10s}\tprints out help and exits")
     print(f"{' -es ':10s}\tenable early stopping for training (default False)")
     print(f"{' -sv ':10s}\tsave segmentation masks produced during validation (default False)")
     print(f"{' -e INT':10s}\thow many epochs to train model for (default 5)")

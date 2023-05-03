@@ -1,0 +1,7 @@
+Dowload data from https://www.kaggle.com/c/carvana-image-masking-challenge
+Required files:
+	- train.zip
+	- train_masks.zip
+extracted into following directories
+	- train
+	- train_masks

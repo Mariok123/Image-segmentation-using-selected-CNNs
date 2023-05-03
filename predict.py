@@ -13,7 +13,6 @@ from utils import (
 
 # Prediction hyperparameters
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-BATCH_SIZE = 1
 NUM_WORKERS = 2
 IMAGE_HEIGHT = 160
 IMAGE_WIDTH = 240
@@ -43,7 +42,6 @@ def main():
     pred_dataset = PredictionDataset(source_dir_path, pred_transforms)
     pred_loader = DataLoader(
         pred_dataset,
-        batch_size=BATCH_SIZE,
         num_workers=NUM_WORKERS,
         pin_memory=PIN_MEMORY,
         shuffle=False,

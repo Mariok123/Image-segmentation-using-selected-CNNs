@@ -1,4 +1,7 @@
-data
+data/*/
+data/*/*/
+!data/Carvana/
+!data/IMCDB-main/
 predicted_images
 training_results
 .project
